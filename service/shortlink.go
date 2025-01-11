@@ -21,6 +21,7 @@ func NewShortLinkService() *ShortLinkService {
 	return &ShortLinkService{}
 }
 
+// 创建短链接
 func (s *ShortLinkService) CreateShortLink(originalURL string) (*model.ShortLink, error) {
 	// 创建记录获取自增ID
 	shortLink := &model.ShortLink{
@@ -46,15 +47,37 @@ func (s *ShortLinkService) CreateShortLink(originalURL string) (*model.ShortLink
 	return shortLink, nil
 }
 
+// 增加访问计数
+func (s *ShortLinkService) IncrementViewCount(code string) error {
+	var shortLink model.ShortLink
+	if err := config.DB.Where("code = ?", code).First(&shortLink).Error; err != nil {
+		return err
+	}
+	return s._incrementViewCount(&shortLink)
+}
+
+// 获取原始URL并增加访问计数
 func (s *ShortLinkService) GetOriginalURL(code string) (string, error) {
 	var shortLink model.ShortLink
 	if err := config.DB.Where("code = ?", code).First(&shortLink).Error; err != nil {
 		return "", err
 	}
 
+	// 更新访问计数
+	if err := s._incrementViewCount(&shortLink); err != nil {
+		return "", err
+	}
+
 	return shortLink.OriginalURL, nil
 }
 
+// 私有方法：增加访问计数
+func (s *ShortLinkService) _incrementViewCount(shortLink *model.ShortLink) error {
+	shortLink.ViewCount++
+	return config.DB.Save(shortLink).Error
+}
+
+// 生成混淆的短码
 func (s *ShortLinkService) generateObfuscatedCode(id uint) (string, error) {
 	if id == 0 {
 		return "", errors.New("invalid ID")
@@ -78,11 +101,13 @@ func (s *ShortLinkService) generateObfuscatedCode(id uint) (string, error) {
 	return obfuscatedCode, nil
 }
 
+// 将ID转换为固定长度的字符串
 func (s *ShortLinkService) padID(id uint) string {
 	// 将ID转换为固定长度的字符串，前面补0
 	return fmt.Sprintf("%06d", id)
 }
 
+// 反转字符串
 func (s *ShortLinkService) reverseString(input string) string {
 	runes := []rune(input)
 	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
@@ -91,6 +116,7 @@ func (s *ShortLinkService) reverseString(input string) string {
 	return string(runes)
 }
 
+// 转换为Base62编码
 func (s *ShortLinkService) encodeBase62(input string) string {
 	num, err := strconv.Atoi(input)
 	if err != nil {
@@ -107,14 +133,16 @@ func (s *ShortLinkService) encodeBase62(input string) string {
 	return result.String()
 }
 
+// 填充Base62编码到固定长度
 func (s *ShortLinkService) padBase62Code(code string) string {
-	// 如果长度不足 6 位，前面补 'a'（或其他字符）
+	// 如果长度不足6位，前面补 'a'（或其他字符）
 	for len(code) < codeLength {
 		code = "a" + code
 	}
 	return code
 }
 
+// 混淆短码
 func (s *ShortLinkService) obfuscateCode(code string) string {
 	// 简单的混淆处理：将字符位置打乱
 	runes := []rune(code)
