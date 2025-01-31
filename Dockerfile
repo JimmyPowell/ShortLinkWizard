@@ -15,6 +15,9 @@ RUN apt-get update && apt-get install -y wget curl \
 # Set Go environment variables
 ENV PATH="/usr/local/go/bin:${PATH}"
 
+# 设置数据库连接的环境变量
+ENV DATABASE_URL=""
+
 # Copy the Go module files and download dependencies
 COPY ShortLinkWizard/go.mod ShortLinkWizard/go.sum ./
 RUN go mod download
@@ -39,4 +42,4 @@ EXPOSE 3000
 WORKDIR /app
 
 # Command to run both the backend and frontend
-CMD ["sh", "-c", "./main & serve -s front_end/out -l 3000"]
+CMD ["sh", "-c", "DATABASE_URL=${DATABASE_URL} ./main & serve -s front_end/out -l 3000"]
