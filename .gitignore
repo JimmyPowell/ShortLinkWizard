@@ -1,0 +1,41 @@
+# Go build output
+bin/
+*.exe
+*.dll
+*.so
+*.test
+
+# Go vendor directory
+vendor/
+
+# Logs
+*.log
+
+# Next.js build output
+.next/
+out/
+
+# Node modules
+/front_end/node_modules/
+/front_end/.next/
+
+# Environment variables
+.env
+
+# Lock files
+*.lock
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Vim swap files
+*.swp
+
+# Sublime Text
+*.sublime-*
+
+# VSCode
+.vscode/
