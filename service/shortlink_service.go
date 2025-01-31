@@ -4,10 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/url"
 	"shortlink/config"
 	"shortlink/model"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -23,25 +25,30 @@ func NewShortLinkService() *ShortLinkService {
 
 // 创建短链接
 func (s *ShortLinkService) CreateShortLink(originalURL string) (*model.ShortLink, error) {
-	// 创建记录获取自增ID
+	// 验证 URL 格式
+	if !isValidURL(originalURL) {
+		return nil, errors.New("invalid URL format")
+	}
+
+	// 创建记录并获取自增ID
 	shortLink := &model.ShortLink{
 		OriginalURL: originalURL,
 	}
 
 	if err := config.DB.Create(shortLink).Error; err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create short link record: %w", err)
 	}
 
 	// 生成混淆的短码
 	code, err := s.generateObfuscatedCode(shortLink.ID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to generate short code: %w", err)
 	}
 
 	// 更新短码
 	shortLink.Code = code
 	if err := config.DB.Save(shortLink).Error; err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to save short code: %w", err)
 	}
 
 	return shortLink, nil
@@ -51,7 +58,7 @@ func (s *ShortLinkService) CreateShortLink(originalURL string) (*model.ShortLink
 func (s *ShortLinkService) IncrementViewCount(code string) error {
 	var shortLink model.ShortLink
 	if err := config.DB.Where("code = ?", code).First(&shortLink).Error; err != nil {
-		return err
+		return fmt.Errorf("failed to find short link by code: %w", err)
 	}
 	return s._incrementViewCount(&shortLink)
 }
@@ -60,12 +67,12 @@ func (s *ShortLinkService) IncrementViewCount(code string) error {
 func (s *ShortLinkService) GetOriginalURL(code string) (string, error) {
 	var shortLink model.ShortLink
 	if err := config.DB.Where("code = ?", code).First(&shortLink).Error; err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to find short link by code: %w", err)
 	}
 
 	// 更新访问计数
 	if err := s._incrementViewCount(&shortLink); err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to increment view count: %w", err)
 	}
 
 	return shortLink.OriginalURL, nil
@@ -80,7 +87,7 @@ func (s *ShortLinkService) _incrementViewCount(shortLink *model.ShortLink) error
 // 生成混淆的短码
 func (s *ShortLinkService) generateObfuscatedCode(id uint) (string, error) {
 	if id == 0 {
-		return "", errors.New("invalid ID")
+		return "", errors.New("invalid ID for short code generation")
 	}
 
 	// 1. 将ID转换为固定长度的字符串
@@ -91,6 +98,9 @@ func (s *ShortLinkService) generateObfuscatedCode(id uint) (string, error) {
 
 	// 3. 转换为Base62编码
 	base62Code := s.encodeBase62(reversedID)
+	if base62Code == "" {
+		return "", errors.New("failed to encode Base62")
+	}
 
 	// 4. 填充到固定长度
 	base62Code = s.padBase62Code(base62Code)
@@ -130,7 +140,8 @@ func (s *ShortLinkService) encodeBase62(input string) string {
 		num = num / 62
 	}
 
-	return result.String()
+	// Base62编码结果需要反转
+	return s.reverseString(result.String())
 }
 
 // 填充Base62编码到固定长度
@@ -144,11 +155,29 @@ func (s *ShortLinkService) padBase62Code(code string) string {
 
 // 混淆短码
 func (s *ShortLinkService) obfuscateCode(code string) string {
-	// 简单的混淆处理：将字符位置打乱
 	runes := []rune(code)
+	seed := time.Now().UnixNano() % 100 // 使用时间戳作为随机种子
+
 	for i := len(runes) - 1; i > 0; i-- {
-		j := int(math.Mod(float64(i*31), float64(i+1)))
+		// 动态计算乘数
+		multiplier := 31 + int(seed)
+		j := int(math.Mod(float64(i*multiplier), float64(i+1)))
+
+		// 交换字符
 		runes[i], runes[j] = runes[j], runes[i]
+
+		// 确保字符在Base62范围内
+		if i%2 == 0 {
+			newCharIndex := (strings.IndexRune(base62Chars, runes[i]) + 1) % len(base62Chars)
+			runes[i] = rune(base62Chars[newCharIndex])
+		}
 	}
+
 	return string(runes)
+}
+
+// 验证 URL 格式是否合法
+func isValidURL(rawURL string) bool {
+	parsed, err := url.Parse(rawURL)
+	return err == nil && parsed.Scheme != "" && parsed.Host != ""
 }
