@@ -15,40 +15,29 @@ var (
 	Config *AppConfig
 )
 
-type DatabaseConfig struct {
-	Host     string
-	Port     string
-	User     string
-	Password string
-	DBName   string
-}
-
 type AppConfig struct {
-	Port string
-	DB   DatabaseConfig
+	Port        string
+	DatabaseURL string
 }
 
 func InitConfig() {
+	// 从环境变量中读取数据库URL
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		// 如果没有设置环境变量，使用默认的本地数据库连接
+		databaseURL = "root:123456@tcp(localhost:3306)/sl2?charset=utf8&parseTime=True&loc=Local"
+		fmt.Println("DATABASE_URL environment variable is not set, using default:", databaseURL)
+	}
+
 	// 初始化应用配置
 	Config = &AppConfig{
-		Port: "8081", // 默认端口
-		DB: DatabaseConfig{
-			Host:     "localhost",
-			Port:     "3306",
-			User:     "root",
-			Password: "123456",
-			DBName:   "sl2",
-		},
+		Port:        "8081", // 默认端口
+		DatabaseURL: databaseURL,
 	}
 
 	// 初始化数据库连接
 	var err error
-	DB, err = gorm.Open("mysql", fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8&parseTime=True&loc=Local",
-		Config.DB.User,
-		Config.DB.Password,
-		Config.DB.Host,
-		Config.DB.Port,
-		Config.DB.DBName))
+	DB, err = gorm.Open("mysql", databaseURL)
 
 	if err != nil {
 		fmt.Println("Failed to connect to database:", err)
