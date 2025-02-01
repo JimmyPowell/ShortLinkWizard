@@ -1,45 +1,52 @@
-# Use the official Ubuntu base image
-FROM ubuntu:latest
+# 第一阶段：构建 Go 后端
+FROM golang:1.20 AS go-builder
 
-# Set the working directory
 WORKDIR /app
 
-# Install dependencies
-RUN apt-get update && apt-get install -y wget curl \
-    && wget https://golang.org/dl/go1.17.6.linux-amd64.tar.gz \
-    && tar -C /usr/local -xzf go1.17.6.linux-amd64.tar.gz \
-    && rm go1.17.6.linux-amd64.tar.gz \
-    && curl -fsSL https://deb.nodesource.com/setup_16.x | bash - \
-    && apt-get install -y nodejs
+# 复制 Go 模块文件
+COPY go.mod go.sum ./
 
-# Set Go environment variables
-ENV PATH="/usr/local/go/bin:${PATH}"
+# 下载依赖（修正命令）
+RUN go mod tidy
 
-# 设置数据库连接的环境变量
-ENV DATABASE_URL=""
+# 复制所有项目文件
+COPY . .
 
-# Copy the Go module files and download dependencies
-COPY ShortLinkWizard/go.mod ShortLinkWizard/go.sum ./
-RUN go mod download
+# 构建可执行文件（修正环境变量和参数）
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o main
 
-# Copy the rest of the application code
-COPY ShortLinkWizard/ .
+# 第二阶段：构建 React 前端
+FROM node:18 AS react-builder
 
-# Build the Go application
-RUN go build -o main .
-
-# Build the Next.js frontend
-WORKDIR /app/front_end
-RUN npm install && npm run build
-
-# Install a simple HTTP server to serve the frontend
-RUN npm install -g serve
-
-# Expose only the port for the frontend
-EXPOSE 3000
-
-# Set the working directory back to the root
 WORKDIR /app
 
-# Command to run both the backend and frontend
-CMD ["sh", "-c", "DATABASE_URL=${DATABASE_URL} ./main & serve -s front_end/out -l 3000"]
+# 复制 package 文件（修正路径）
+COPY front_end/package*.json .
+
+# 安装依赖
+RUN npm install
+
+# 复制前端项目文件（修正路径）
+COPY front_end .
+
+# 构建 React 项目
+RUN npm run build
+
+# 第三阶段：创建轻量级镜像
+FROM alpine:latest
+
+# 安装依赖（修正命令顺序）
+RUN apk add --no-cache ca-certificates
+
+WORKDIR /root
+
+# 复制 Go 可执行文件
+COPY --from=go-builder /app/main .
+
+# 复制 React 静态文件（假设构建路径正确）
+COPY --from=react-builder /app/build ./static
+
+EXPOSE 8081
+
+# 运行应用（修正 CMD 格式）
+CMD ["./main"]

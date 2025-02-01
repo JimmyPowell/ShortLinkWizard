@@ -19,6 +19,9 @@ func SetupRouter() *gin.Engine {
 		AllowCredentials: true,
 	}))
 
+	// 提供静态文件服务
+	
+
 	shortLinkController := controller.NewShortLinkController()
 
 	// 创建短链接
