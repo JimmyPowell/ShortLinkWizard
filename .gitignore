@@ -18,7 +18,8 @@ out/
 # Node modules
 /front_end/node_modules/
 /front_end/.next/
-
+/front_end/.out/
+./node_modules
 # Environment variables
 .env
 
